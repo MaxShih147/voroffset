@@ -39,7 +39,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # CMake options
 option(VOROFFSET_WITH_SANITIZERS "Enable sanitizers"  OFF)
-option(VOROFFSET_WITH_TBB        "Enable TBB"         ON)
+option(VOROFFSET_WITH_TBB        "Enable TBB"         OFF)
 
 option(SANITIZE_ADDRESS          "Sanitize Address"   OFF)
 option(SANITIZE_MEMORY           "Sanitize Memory"    OFF)
@@ -55,16 +55,16 @@ option(SANITIZE_UNDEFINED        "Sanitize Undefined" OFF)
 ################################################################################
 
 # Sanitizers
-if(VOROFFSET_WITH_SANITIZERS)
-	list(APPEND CMAKE_MODULE_PATH ${VOROFFSET_EXTERNAL}/sanitizers-cmake/cmake)
-endif()
+# if(VOROFFSET_WITH_SANITIZERS)
+# 	list(APPEND CMAKE_MODULE_PATH ${VOROFFSET_EXTERNAL}/sanitizers-cmake/cmake)
+# endif()
 
 include(VoroffsetDependencies)
 
 ################################################################################
 
 # 2D version prototype
-add_subdirectory(src/vor2d)
+# add_subdirectory(src/vor2d)
 
 # 3D version prototype
 add_subdirectory(src/vor3d)

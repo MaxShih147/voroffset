@@ -53,14 +53,15 @@ target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_14)
 set_target_properties(${PROJECT_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Sanitizers
-if(VOROFFSET_WITH_SANITIZERS)
-	add_sanitizers(${PROJECT_NAME})
-endif()
+# if(VOROFFSET_WITH_SANITIZERS)
+# 	add_sanitizers(${PROJECT_NAME})
+# endif()
 
 # Dependencies
-target_link_libraries(${PROJECT_NAME} PUBLIC Eigen3::Eigen geogram::geogram)
+# target_link_libraries(${PROJECT_NAME} PUBLIC Eigen3::Eigen geogram::geogram)
+target_link_libraries(${PROJECT_NAME} PUBLIC Eigen3::Eigen)
 
 # TBB library
-if(VOROFFSET_WITH_TBB)
-	target_link_libraries(${PROJECT_NAME} PUBLIC tbb::tbb)
-endif()
+# if(VOROFFSET_WITH_TBB)
+# 	target_link_libraries(${PROJECT_NAME} PUBLIC tbb::tbb)
+# endif()

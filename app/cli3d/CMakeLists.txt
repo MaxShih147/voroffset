@@ -18,7 +18,8 @@ if(VOROFFSET_WITH_SANITIZERS)
 endif()
 
 # Dependencies
-target_link_libraries(${PROJECT_NAME} PRIVATE vor3d CLI11::CLI11 json::json)
+# target_link_libraries(${PROJECT_NAME} PRIVATE vor3d CLI11::CLI11 json::json)
+target_link_libraries(${PROJECT_NAME} PRIVATE vor3d)
 
 # Output directory for binaries
 set_target_properties(${PROJECT_NAME}
