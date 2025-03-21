@@ -1,68 +1,43 @@
-# Voroffset
+# Voroffset for Web Resin Slicer
 
-[![Build Status](https://travis-ci.com/geometryprocessing/voroffset.svg?branch=master)](https://travis-ci.com/geometryprocessing/voroffset)
+*Based on the work of [geometryprocessing/voroffset](https://github.com/geometryprocessing/voroffset)*
 
-Discrete mesh offsetting based on half-space Voronoi diagrams and Power diagrams.
+**Forked and modified for WebAssembly integration on macOS (MacBook Air 2024, M3 chip).**
 
-### Compilation
+## Overview
 
-Dependencies are downloaded automatically by CMake at configuration time. To compile the code, just type:
+This repository is a fork of the original Voroffset project. The goal of this fork is to adapt the 3D offset (hollowing) algorithm for use in a web-based light-curing resin slicer application. Our primary targets are:
 
-```bash
-mkdir build
-cd build
-cmake ..
-cmake --build . -j8 --config Release
-```
+- **WebAssembly Integration:** Produce a lightweight module for front-end usage.
+- **Simplified External Dependencies:** Reduce or remove external libraries (e.g., Geogram) to lower the overhead when compiling to WebAssembly.
+- **Clean API Interface:** Replace the original CLI interface with a structured API for better integration.
 
-### Running the code
+## Key Modifications
 
-See possible options with:
+- **Build Configuration for macOS (M3 chip):**  
+  The CMake files have been modified to disable external dependencies that fail to build on macOS—particularly Geogram. As a result, the dexelization functionality is currently stubbed out:
+  - Functions such as `voroffset3d::CompressedVolume`, `voroffset3d::create_dexels`, and `voroffset3d::dexel_dump` (and related helpers in `dexelize.cpp`) are empty.
+  - These will be replaced later with either alternative libraries or custom code.
 
-```bash
-./offset3d -h
-```
+- **API Refactoring:**  
+  The original project used a CLI (defined in `main`) to allow user interaction. In this fork, the CLI is removed in favor of designing a dedicated API. This API will be the interface through which the front-end (via WebAssembly) interacts with the 3D offset functionality.
 
-Example usage:
+- **Minimized External Dependencies:**  
+  We have intentionally reduced external dependencies to ease the future WebAssembly build process. Our focus is on maintaining the core 3D offset algorithm while providing our own implementations for parts that originally depended on Geogram.
 
-```
-./offset3d filigree.ply -n 512 -p 10 -r 5 -x dilation
-```
+## Future Work
 
-##### offset2d
+1. [ ] **Dexelization Replacement:**  
+  Implement custom dexelization functions (or integrate another library) to replace the Geogram-dependent functionality.
+  
+2. [ ] **API Development:**  
+  Design and document the final API for users who will integrate this module with a web front-end.
+  
+3. [ ] **WebAssembly Compilation:**  
+  Finalize the build process for compiling this project into a WebAssembly module to be used in the resin slicer application.
 
-Takes a .svg file as input, and saves the result of the dilation as a quad-mesh (.obj).
+## Development Environment
 
-##### offset3d
-
-Takes a triangle mesh as input (.stl, .obj, .off), and saves the dilated output as a mesh (quad-mesh with .obj, hex-mesh with .mesh, etc.)
-
-```
-Offset3D
-Usage: ./offset3d [OPTIONS] input [output]
-
-Positionals:
-  input TEXT                  Input model
-  output TEXT=output.obj      Output model
-
-Options:
-  -h,--help                   Print this help message and exit
-  -i,--input TEXT             Input model
-  -o,--output TEXT=output.obj Output model
-  -j,--json TEXT              Output json file
-  -d,--dexels_size FLOAT=1    Size of a dexel (in mm)
-  -n,--num_dexels INT=256     Number of dexels (-1 to use dexel size instead)
-  -p,--padding INT            Padding (in #dexels)
-  -t,--num_thread UINT=6      Number of threads
-  -r,--radius FLOAT=8         Dilation/erosion radius (in #dexels)
-  -m,--method TEXT in {brute_force,ours}
-                              The method to use
-  -x,--apply TEXT in {closing,dilation,erosion,noop,opening}=dilation
-                              Morphological operation to apply
-  -f,--force                  Overwrite output file
-  -u,--radius_in_mm           Radius is given in mm instead
-```
-
-### Replicability
-
-Head over to the [scripts/](scripts/) folder for further instructions.
+- **Platform:** macOS (MacBook Air 2024, M3 chip)
+- **Build Tools:** CMake, Visual Studio Code
+- **Target:** WebAssembly for front-end integration in a light-curing web resin slicer project
