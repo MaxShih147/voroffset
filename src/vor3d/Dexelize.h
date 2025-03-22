@@ -3,6 +3,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 #include "vor3d/Common.h"
 #include "vor3d/CompressedVolume.h"
+#include "vor3d/Geometry.h"
 #include <set>
 #include <limits>
 #include <cassert>
@@ -11,6 +12,20 @@
 
 namespace voroffset3d
 {
+	CompressedVolume CreateDexelsFromMeshBuffers(
+		const std::vector<float>& _vertices,
+		const std::vector<unsigned int>& _facetIndices,
+		double &_voxelSize,
+		int _padding = 0, 
+		int _numVoxels = -1
+	);
+
+	void DumpDexelsIntoMeshBuffers(
+		const CompressedVolume &_dexels,
+		std::vector<float> &_vertices,
+		std::vector<unsigned int> &_facetIndices
+	);
+
 /**
  * @brief Deprecated: Creates dexel volume from a model file.
  * @note This modification was implemented by max_shih.

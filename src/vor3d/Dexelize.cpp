@@ -10,6 +10,9 @@
 // #include <geogram/mesh/mesh_io.h>
 // #include <geogram/mesh/mesh_AABB.h>
 // #include <geogram/numerics/predicates.h>
+
+#include "vor3d/AABB.h"
+
 #include <random>
 #include <chrono>
 #include <algorithm>
@@ -30,21 +33,21 @@
 #define TEST_HEI 40
 #endif
 
-namespace
-{
+// namespace
+// {
 
-	template <typename Scalar, size_t Rows>
-	inline std::ostream& operator<<(std::ostream &out, std::array<Scalar, Rows> v)
-	{
-		out << "{";
-		if (!v.empty())
-		{
-			std::copy(v.begin(), v.end() - 1, std::ostream_iterator<Scalar>(out, "; "));
-			out << v.back();
-		}
-		out << "}";
-		return out;
-	}
+	// template <typename Scalar, size_t Rows>
+	// inline std::ostream& operator<<(std::ostream &out, std::array<Scalar, Rows> v)
+	// {
+	// 	out << "{";
+	// 	if (!v.empty())
+	// 	{
+	// 		std::copy(v.begin(), v.end() - 1, std::ostream_iterator<Scalar>(out, "; "));
+	// 		out << v.back();
+	// 	}
+	// 	out << "}";
+	// 	return out;
+	// }
 
 	////////////////////////////////////////////////////////////////////////////////
 	// NOTE: Function `point_in_triangle_2d` comes from SDFGen by Christopher Batty.
@@ -52,44 +55,44 @@ namespace
 	////////////////////////////////////////////////////////////////////////////////
 
 	// calculate twice signed area of triangle (0,0)-(x1,y1)-(x2,y2)
-	// return an SOS-determined sign (-1, +1, or 0 only if it's a truly degenerate triangle)
-	int orientation(
-		double x1, double y1, double x2, double y2, double &twice_signed_area)
-	{
-		twice_signed_area = y1 * x2 - x1 * y2;
-		if (twice_signed_area > 0) return 1;
-		else if (twice_signed_area < 0) return -1;
-		else if (y2 > y1) return 1;
-		else if (y2 < y1) return -1;
-		else if (x1 > x2) return 1;
-		else if (x1 < x2) return -1;
-		else return 0; // only true when x1==x2 and y1==y2
-	}
+	// // return an SOS-determined sign (-1, +1, or 0 only if it's a truly degenerate triangle)
+	// int orientation(
+	// 	double x1, double y1, double x2, double y2, double &twice_signed_area)
+	// {
+	// 	twice_signed_area = y1 * x2 - x1 * y2;
+	// 	if (twice_signed_area > 0) return 1;
+	// 	else if (twice_signed_area < 0) return -1;
+	// 	else if (y2 > y1) return 1;
+	// 	else if (y2 < y1) return -1;
+	// 	else if (x1 > x2) return 1;
+	// 	else if (x1 < x2) return -1;
+	// 	else return 0; // only true when x1==x2 and y1==y2
+	// }
 
 	// -----------------------------------------------------------------------------
 
 	// robust test of (x0,y0) in the triangle (x1,y1)-(x2,y2)-(x3,y3)
 	// if true is returned, the barycentric coordinates are set in a,b,c.
-	bool point_in_triangle_2d(
-		double x0, double y0, double x1, double y1,
-		double x2, double y2, double x3, double y3,
-		double &a, double &b, double &c)
-	{
-		x1 -= x0; x2 -= x0; x3 -= x0;
-		y1 -= y0; y2 -= y0; y3 -= y0;
-		int signa = orientation(x2, y2, x3, y3, a);
-		if (signa == 0) return false;
-		int signb = orientation(x3, y3, x1, y1, b);
-		if (signb != signa) return false;
-		int signc = orientation(x1, y1, x2, y2, c);
-		if (signc != signa) return false;
-		double sum = a + b + c;
-		// geo_assert(sum != 0); // if the SOS signs match and are nonzero, there's no way all of a, b, and c are zero.
-		a /= sum;
-		b /= sum;
-		c /= sum;
-		return true;
-	}
+	// bool point_in_triangle_2d(
+	// 	double x0, double y0, double x1, double y1,
+	// 	double x2, double y2, double x3, double y3,
+	// 	double &a, double &b, double &c)
+	// {
+	// 	x1 -= x0; x2 -= x0; x3 -= x0;
+	// 	y1 -= y0; y2 -= y0; y3 -= y0;
+	// 	int signa = orientation(x2, y2, x3, y3, a);
+	// 	if (signa == 0) return false;
+	// 	int signb = orientation(x3, y3, x1, y1, b);
+	// 	if (signb != signa) return false;
+	// 	int signc = orientation(x1, y1, x2, y2, c);
+	// 	if (signc != signa) return false;
+	// 	double sum = a + b + c;
+	// 	// geo_assert(sum != 0); // if the SOS signs match and are nonzero, there's no way all of a, b, and c are zero.
+	// 	a /= sum;
+	// 	b /= sum;
+	// 	c /= sum;
+	// 	return true;
+	// }
 
 	// -----------------------------------------------------------------------------
 
@@ -224,7 +227,7 @@ namespace
 	// 	}
 	// }
 
-}
+// }
 
 ////////////////////////////////////////////////////////////////////////////////
 /**
@@ -280,6 +283,103 @@ namespace
 // 	compute_sign(M, aabb_tree, dexels);
 // 	return dexels;
 // }
+
+voroffset3d::CompressedVolume CreateDexelsFromMeshBuffers(
+	const std::vector<float>& _vertices,
+	const std::vector<unsigned int>& _facetIndices,
+	double &_voxelSize,
+	int _padding, 
+	int _numVoxels
+) {
+
+	auto _ComputeBoundingBox = [&](Vertex& bbMin, Vertex& bbMax) {
+
+		if (_vertices.empty()) {
+			return;
+		}
+	
+		bbMin = Vertex( std::numeric_limits<float>::max(),
+						std::numeric_limits<float>::max(),
+						std::numeric_limits<float>::max() );
+	
+		bbMax = Vertex( std::numeric_limits<float>::lowest(),
+						std::numeric_limits<float>::lowest(),
+						std::numeric_limits<float>::lowest() );
+	
+		auto n = _vertices.size() / 3;
+
+		for (auto i = 0; i < n; ++i) {
+			
+			float x = _vertices[3 * i];
+			float y = _vertices[3 * i + 1];
+			float z = _vertices[3 * i + 2];
+	
+			bbMin.x = std::min(bbMin.x, x);
+			bbMin.y = std::min(bbMin.y, y);
+			bbMin.z = std::min(bbMin.z, z);
+	
+			bbMax.x = std::max(bbMax.x, x);
+			bbMax.y = std::max(bbMax.y, y);
+			bbMax.z = std::max(bbMax.z, z);
+		}
+	};
+	
+	// Initialize voxel grid and AABB tree
+	
+	Vertex minCorner, maxCorner;
+	_ComputeBoundingBox(minCorner, maxCorner);
+	Vertex extent = maxCorner - minCorner;
+
+	if (_numVoxels > 0) {
+		// Force number of voxels along longest axis
+		double maxExtent = std::max(extent.x, std::max(extent.y, extent.z));
+		_voxelSize = maxExtent / _numVoxels;
+	}
+	
+	AABB aabbTree;
+
+	aabbTree.Initialize(
+		_facetIndices.size() / 3,  // 一個 triangle 有 3 個 index
+		[&](Box& box, size_t faceIndex) {
+			size_t i0 = _facetIndices[faceIndex * 3 + 0];
+			size_t i1 = _facetIndices[faceIndex * 3 + 1];
+			size_t i2 = _facetIndices[faceIndex * 3 + 2];
+	
+			const float* p0 = &_vertices[i0 * 3];
+			const float* p1 = &_vertices[i1 * 3];
+			const float* p2 = &_vertices[i2 * 3];
+	
+			box.minCorner = Vertex(p0[0], p0[1], p0[2]);
+			box.maxCorner = box.minCorner;
+	
+			auto UpdateBounds = [&](const float* p) {
+				box.minCorner.x = std::min(box.minCorner.x, p[0]);
+				box.minCorner.y = std::min(box.minCorner.y, p[1]);
+				box.minCorner.z = std::min(box.minCorner.z, p[2]);
+	
+				box.maxCorner.x = std::max(box.maxCorner.x, p[0]);
+				box.maxCorner.y = std::max(box.maxCorner.y, p[1]);
+				box.maxCorner.z = std::max(box.maxCorner.z, p[2]);
+			};
+	
+			UpdateBounds(p1);
+			UpdateBounds(p2);
+		}
+	);
+	
+	// // Dexelize the input mesh
+	// GEO::Logger::div("Dexelizing");
+	// CompressedVolume dexels(
+	// 	Eigen::Vector3d(),//Eigen::Vector3d(min_corner[0], min_corner[1], min_corner[2]),
+	// 	Eigen::Vector3d(),//Eigen::Vector3d(extent[0], extent[1], extent[2]),
+	// 	voxel_size, padding);
+	// compute_sign(M, aabb_tree, dexels);
+	voroffset3d::CompressedVolume dexels;
+	return dexels;
+}
+
+
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // NOTE: Function `dexel_dump` comes from SDFGen by Christopher Batty.
