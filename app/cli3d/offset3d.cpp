@@ -61,15 +61,15 @@ int main() {
 	// Declare stuff
 	vor3d::CompressedVolume input;
 	vor3d::CompressedVolume output;
-	double time = 0;
+	// double time = 0;
 	double time_1, time_2;
 	// nlohmann::json json_data;
 
 	// Load input model and dexelize
-	Timer t;
+	// Timer t;
 	{
 		// GEO::Stopwatch W("Dexelize");
-		input = vor3d::create_dexels(args.input, args.dexels_size, args.padding, args.num_dexels);
+		// input = vor3d::create_dexels(args.input, args.dexels_size, args.padding, args.num_dexels);
 	}
 
 	// Compute radius in #dexels if needed, and display some stats
@@ -98,9 +98,9 @@ int main() {
 	// 	};
 	// }
 
-	#ifdef USE_TBB
-	tbb::task_scheduler_init init(args.num_thread);
-	#endif
+	// #ifdef USE_TBB
+	// tbb::task_scheduler_init init(args.num_thread);
+	// #endif
 
 	// Create offset operator
 	// GEO::Logger::div("Offseting");
@@ -138,45 +138,47 @@ int main() {
 		throw std::invalid_argument("Operation");
 	}
 
-	// GEO::Logger::div("Saving");
-	if (!args.output_mesh.empty()) {
-		if (std::ifstream(args.output_mesh)) {
-			// Output file exists!
-			if (args.force) {
-				// GEO::Logger::out("Save") << "Overwriting output file: " << args.output_mesh << std::endl;
-				// GEO::Stopwatch W("Save");
-				vor3d::dexel_dump(args.output_mesh, output);
-			} else {
-				// GEO::Logger::out("Save") << "Output mesh already exists. Please use -f to force overwriting." << std::endl;
-			}
-		} else {
-			// GEO::Stopwatch W("Save");
-			std::ofstream out(args.output_mesh.c_str());
-			vor3d::dexel_dump(args.output_mesh, output);
-		}
-	}
+    // TODO: add dexel dump (into mesh) here ....
 
-	time = t.get();
-	if (!args.output_json.empty()) {
+	// GEO::Logger::div("Saving");
+	// if (!args.output_mesh.empty()) {
+	// 	if (std::ifstream(args.output_mesh)) {
+	// 		// Output file exists!
+	// 		if (args.force) {
+	// 			GEO::Logger::out("Save") << "Overwriting output file: " << args.output_mesh << std::endl;
+	// 			GEO::Stopwatch W("Save");
+	// 			vor3d::dexel_dump(args.output_mesh, output);
+	// 		} else {
+	// 			GEO::Logger::out("Save") << "Output mesh already exists. Please use -f to force overwriting." << std::endl;
+	// 		}
+	// 	} else {
+	// 		GEO::Stopwatch W("Save");
+	// 		std::ofstream out(args.output_mesh.c_str());
+	// 		vor3d::dexel_dump(args.output_mesh, output);
+	// 	}
+	// }
+
+	// time = t.get();
+	// if (!args.output_json.empty()) {
 		// json_data["time"] = time;
 		// json_data["time_first_pass"] = time_1;
 		// json_data["time_second_pass"] = time_2;
-	}
+	// }
 
-	if (!args.output_json.empty()) {
-		if (std::ifstream(args.output_json)) {
+	// if (!args.output_json.empty()) {
+		// if (std::ifstream(args.output_json)) {
 			// Output file exists!
-			if (args.force) {
+			// if (args.force) {
 				// GEO::Logger::out("Save") << "Overwriting output file: " << args.output_json << std::endl;
 				// std::ofstream o(args.output_json);
 				// o << std::setw(4) << json_data << std::endl;
-			} else {
+			// } else {
 				// GEO::Logger::out("Save") << "Output json already exists. Please use -f to force overwriting." << std::endl;
-			}
-		} else {
+			// }
+		// } else {
 			// std::ofstream o(args.output_json);
 			// o << std::setw(4) << json_data << std::endl;
-		}
-	}
+		// }
+	// }
 	return 0;
 }

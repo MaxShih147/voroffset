@@ -227,67 +227,91 @@ namespace
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/**
+ * @brief Deprecated: Creates dexel volume from a model file.
+ * @note This modification was implemented by max_shih.
+ *
+ * This function uses geogram (under GEO namespace) routines to generate dexels from a file.
+ * Now models are pre-parsed into vertices and facet indices externally, and GEO functions
+ * are being replaced by custom code. Use the new (name) function instead.
+ *
+ */
+// voroffset3d::CompressedVolume voroffset3d::create_dexels(
+// 	const std::string &filename, double &voxel_size, int padding, int num_voxels)
+// {
+// 	// Initialize the Geogram library
+// 	GEO::initialize();
 
-voroffset3d::CompressedVolume voroffset3d::create_dexels(
-	const std::string &filename, double &voxel_size, int padding, int num_voxels)
-{
-	// // Initialize the Geogram library
-	// GEO::initialize();
+// 	// Import standard command line arguments, and custom ones
+// 	GEO::CmdLine::import_arg_group("standard");
 
-	// // Import standard command line arguments, and custom ones
-	// GEO::CmdLine::import_arg_group("standard");
+// 	// Declare a mesh
+// 	GEO::Mesh M;
 
-	// // Declare a mesh
-	// GEO::Mesh M;
+// 	// Load the mesh and display timings
+// 	GEO::Logger::div("Loading");
+// 	{
+// 		GEO::Stopwatch W("Load");
+// 		if (!GEO::mesh_load(filename, M))
+// 		{
+// 			throw std::runtime_error("Invalid input mesh.");
+// 		}
+// 		geo_assert(M.vertices.dimension() == 3);
+// 	}
 
-	// // Load the mesh and display timings
-	// GEO::Logger::div("Loading");
-	// {
-	// 	GEO::Stopwatch W("Load");
-	// 	if (!GEO::mesh_load(filename, M))
-	// 	{
-	// 		throw std::runtime_error("Invalid input mesh.");
-	// 	}
-	// 	geo_assert(M.vertices.dimension() == 3);
-	// }
+// 	// Initialize voxel grid and AABB tree
+// 	GEO::vec3 min_corner, max_corner;
+// 	GEO::get_bbox(M, &min_corner[0], &max_corner[0]);
+// 	GEO::vec3 extent = max_corner - min_corner;
+// 	if (num_voxels > 0)
+// 	{
+// 		// Force number of voxels along longest axis
+// 		double max_extent = std::max(extent[0], std::max(extent[1], extent[2]));
+// 		voxel_size = max_extent / num_voxels;
+// 	}
+// 	GEO::MeshFacetsAABB aabb_tree(M);
 
-	// // Initialize voxel grid and AABB tree
-	// GEO::vec3 min_corner, max_corner;
-	// GEO::get_bbox(M, &min_corner[0], &max_corner[0]);
-	// GEO::vec3 extent = max_corner - min_corner;
-	// if (num_voxels > 0)
-	// {
-	// 	// Force number of voxels along longest axis
-	// 	double max_extent = std::max(extent[0], std::max(extent[1], extent[2]));
-	// 	voxel_size = max_extent / num_voxels;
-	// }
-	// GEO::MeshFacetsAABB aabb_tree(M);
-
-	// // Dexelize the input mesh
-	// GEO::Logger::div("Dexelizing");
-	CompressedVolume dexels(
-		Eigen::Vector3d(),//Eigen::Vector3d(min_corner[0], min_corner[1], min_corner[2]),
-		Eigen::Vector3d(),//Eigen::Vector3d(extent[0], extent[1], extent[2]),
-		voxel_size, padding);
-	// compute_sign(M, aabb_tree, dexels);
-	return dexels;
-}
+// 	// Dexelize the input mesh
+// 	GEO::Logger::div("Dexelizing");
+// 	CompressedVolume dexels(
+// 		Eigen::Vector3d(),//Eigen::Vector3d(min_corner[0], min_corner[1], min_corner[2]),
+// 		Eigen::Vector3d(),//Eigen::Vector3d(extent[0], extent[1], extent[2]),
+// 		voxel_size, padding);
+// 	compute_sign(M, aabb_tree, dexels);
+// 	return dexels;
+// }
 
 ////////////////////////////////////////////////////////////////////////////////
 // NOTE: Function `dexel_dump` comes from SDFGen by Christopher Batty.
 // https://github.com/jdumas/geotools/blob/master/voxmesh
 ////////////////////////////////////////////////////////////////////////////////
 
-bool endswith(const std::string &str, const std::string &suffix) {
-	if (str.length() >= suffix.length()) {
-		return (0 == str.compare(str.length() - suffix.length(), suffix.length(), suffix));
-	} else {
-		return false;
-	}
-}
+/**
+ * @brief Deprecated: Dumps points from the dexel structure.
+ * @note This modification was implemented by max_shih.
+ *
+ * This is used by dexel_dump, which is replaced by a new function outputting
+ * Three.js-friendly data (vertices and indices).
+ * 
+ */
+// bool endswith(const std::string &str, const std::string &suffix) {
+// 	if (str.length() >= suffix.length()) {
+// 		return (0 == str.compare(str.length() - suffix.length(), suffix.length(), suffix));
+// 	} else {
+// 		return false;
+// 	}
+// }
 
-void points_dump(const std::string &filename, const voroffset3d::CompressedVolume &dexels)
-{
+/**
+ * @brief Deprecated: Dumps points from the dexel structure.
+ * @note This modification was implemented by max_shih.
+ *
+ * This is used by dexel_dump, which is replaced by a new function outputting
+ * Three.js-friendly data (vertices and indices).
+ * 
+ */
+// void points_dump(const std::string &filename, const voroffset3d::CompressedVolume &dexels)
+// {
 	// GEO::Mesh mesh;
 
 	// for (int y = 0; y < dexels.gridSize()[1]; ++y) {
@@ -307,10 +331,10 @@ void points_dump(const std::string &filename, const voroffset3d::CompressedVolum
 	// }
 
 	// GEO::mesh_save(mesh, filename);
-}
+// }
 
-void voroffset3d::dexel_dump(const std::string &filename, const CompressedVolume &dexels)
-{
+// void voroffset3d::dexel_dump(const std::string &filename, const CompressedVolume &dexels)
+// {
 	// if (endswith(filename, ".xyz")) {
 	// 	points_dump(filename, dexels);
 	// 	return;
@@ -348,5 +372,5 @@ void voroffset3d::dexel_dump(const std::string &filename, const CompressedVolume
 	// mesh.vertices.remove_isolated();
 
 	// GEO::mesh_save(mesh, filename);
-}
+// }
 
