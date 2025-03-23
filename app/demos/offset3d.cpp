@@ -124,7 +124,7 @@ bool WriteSTL(const std::string &filename, const std::vector<double>& vertices, 
         return false;
     }
     
-    std::ofstream out(filename, std::ios::binary);
+    std::ofstream out(filename, std::ios::binary | std::ios::out);
     if (!out) {
         std::cerr << "Error: Cannot open file for writing: " << filename << std::endl;
         return false;
@@ -197,8 +197,8 @@ bool WriteSTL(const std::string &filename, const std::vector<double>& vertices, 
  */
 int main() {
 
-	std::string inputFilename = "...";
-	std::string outputFilename = "...";
+	std::string inputFilename = "input/01.stl";
+	std::string outputFilename = "output/result.stl";
 
 	// Read the input STL model into flat vertex array and triangle index array.
     std::vector<double> inVertices;
