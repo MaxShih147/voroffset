@@ -44,7 +44,7 @@
  * @param outIndices [output] Triangle index array (3 indices per triangle).
  * @return true if reading was successful, false otherwise.
  */
-bool ReadSTL(const std::string &filename, std::vector<double>& outVertices, std::vector<unsigned int>& outIndices) {
+bool ReadSTL(const std::string &filename, std::vector<float>& outVertices, std::vector<unsigned int>& outIndices) {
     std::ifstream in(filename, std::ios::binary);
     if (!in) {
         std::cerr << "Error: Cannot open STL file: " << filename << std::endl;
@@ -92,7 +92,7 @@ bool ReadSTL(const std::string &filename, std::vector<double>& outVertices, std:
 
         // Copy vertices (convert to double)
         for (int j = 0; j < 9; ++j) {
-            outVertices[i * 9 + j] = static_cast<double>(triangleVerts[j]);
+            outVertices[i * 9 + j] = triangleVerts[j];
         }
 
         // Set triangle indices (each triangle gets new vertices)
@@ -117,7 +117,7 @@ bool ReadSTL(const std::string &filename, std::vector<double>& outVertices, std:
  * @param indices The triangle index array (3 indices per triangle).
  * @return true if writing was successful, false otherwise.
  */
-bool WriteSTL(const std::string &filename, const std::vector<double>& vertices, const std::vector<unsigned int>& indices) {
+bool WriteSTL(const std::string &filename, const std::vector<float>& vertices, const std::vector<unsigned int>& indices) {
 	// Check if the sizes are valid (each triangle should have 3 indices and each vertex has 3 coordinates)
     if (indices.size() % 3 != 0 || vertices.size() % 3 != 0) {
         std::cerr << "Error: Invalid vertices or indices size." << std::endl;
@@ -148,9 +148,9 @@ bool WriteSTL(const std::string &filename, const std::vector<double>& vertices, 
         // Extract vertices from the flat array and convert to float
         float v0[3], v1[3], v2[3];
         for (int j = 0; j < 3; ++j) {
-            v0[j] = static_cast<float>(vertices[idx0 * 3 + j]);
-            v1[j] = static_cast<float>(vertices[idx1 * 3 + j]);
-            v2[j] = static_cast<float>(vertices[idx2 * 3 + j]);
+            v0[j] = vertices[idx0 * 3 + j];
+            v1[j] = vertices[idx1 * 3 + j];
+            v2[j] = vertices[idx2 * 3 + j];
         }
         
         // Compute normal using cross product of (v1 - v0) and (v2 - v0)
@@ -201,7 +201,7 @@ int main() {
 	std::string outputFilename = "output/result.stl";
 
 	// Read the input STL model into flat vertex array and triangle index array.
-    std::vector<double> inVertices;
+    std::vector<float> inVertices;
     std::vector<unsigned int> inIndices;
     if (!ReadSTL(inputFilename, inVertices, inIndices)) {
         std::cerr << "Error: Failed to read STL file: " << inputFilename << std::endl;
@@ -212,13 +212,13 @@ int main() {
     // Convert the STL mesh into a CompressedVolume for dexel processing.
     // TODO: Replace this placeholder with your actual conversion function.
     vor3d::CompressedVolume inputVolume;
-    // Example: inputVolume = CreateDexelsFromMeshBuffers(inVertices, inIndices, dexelsSize, padding, numDexels);
+	double dexelsSize = 1.0;
+	double padding = 0.0;
+	int numDexels = 256;
+    inputVolume = voroffset3d::CreateDexelsFromMeshBuffers(inVertices, inIndices, dexelsSize, padding, numDexels);
     
     // Set default parameters (adjust as necessary)
     double radius = 8.0;
-    double dexelsSize = 1.0;
-    int padding = 0;
-    int numDexels = 256;
     bool radiusInMM = false;
     
     // Convert radius from mm to dexel units if needed.
@@ -267,8 +267,10 @@ int main() {
 
 	// TODO: Convert the output CompressedVolume back to STL mesh arrays.
 	// For now, we use placeholder empty vectors.
-	std::vector<double> outVertices;         // Output vertex array (x, y, z interleaved)
+	std::vector<float> outVertices;         // Output vertex array (x, y, z interleaved)
 	std::vector<unsigned int> outIndices;      // Output triangle index array (3 indices per triangle)
+
+	voroffset3d::DumpDexelsIntoMeshBuffers(outputVolume, outVertices, outIndices);
 
 	// Write the output STL model.
 	if (!WriteSTL(outputFilename, outVertices, outIndices)) {

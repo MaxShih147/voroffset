@@ -136,7 +136,7 @@ void ComputeDexelIntersections(
     }
 }
 
-voroffset3d::CompressedVolume CreateDexelsFromMeshBuffers(
+voroffset3d::CompressedVolume voroffset3d::CreateDexelsFromMeshBuffers(
 	const std::vector<float>& _vertices,
 	const std::vector<unsigned int>& _facetIndices,
 	double &_voxelSize,
@@ -227,4 +227,120 @@ voroffset3d::CompressedVolume CreateDexelsFromMeshBuffers(
 	
 	ComputeDexelIntersections(_vertices, _facetIndices, aabbTree, dexels);
 	return dexels;
+}
+
+/**
+ * @brief Convert dexel data into mesh buffers.
+ *
+ * For each cell in the dexel grid, each pair of z-values (span)
+ * is converted into a hexahedron (cube) whose base is determined by the
+ * cell's x-y position and whose z extents are determined by the span.
+ *
+ * The hexahedron is then triangulated into 12 triangles.
+ *
+ * The output vertices are stored in _vertices as a flat float array (x,y,z interleaved),
+ * and the triangle facet indices are stored in _facetIndices.
+ *
+ * @param _dexels [input] The compressed dexel volume.
+ * @param _vertices [output] The output vertex array (x, y, z interleaved, float values).
+ * @param _facetIndices [output] The output triangle indices (unsigned int), 3 per triangle.
+ */
+void voroffset3d::DumpDexelsIntoMeshBuffers(
+    const vor3d::CompressedVolume &_dexels,
+    std::vector<float> &_vertices,
+    std::vector<unsigned int> &_facetIndices
+) {
+    // Get grid dimensions from the dexel volume
+    // Assuming gridSize() returns a vector or array with at least two elements: {width, height}
+    auto gridSize = _dexels.gridSize();
+    int gridW = gridSize[0];
+    int gridH = gridSize[1];
+
+    // Get voxel spacing and origin (convert to float)
+    float spacing = static_cast<float>(_dexels.spacing());
+    auto origin = _dexels.origin(); // Assuming Eigen::Vector3d
+    float originArr[3] = { static_cast<float>(origin[0]),
+                           static_cast<float>(origin[1]),
+                           static_cast<float>(origin[2]) };
+
+    // For each cell in the dexel grid:
+    for (int y = 0; y < gridH; ++y) {
+        for (int x = 0; x < gridW; ++x) {
+            // Get the list of z-span values for cell (x, y)
+            const std::vector<double> &spans = _dexels.at(x, y);
+            // Process each span (each span is stored as a pair: [z_min, z_max])
+            for (size_t i = 0; 2 * i < spans.size(); ++i) {
+                // Compute the minimum and maximum 3D coordinates for this cell span
+                float xmin = originArr[0] + x * spacing;
+                float ymin = originArr[1] + y * spacing;
+                float zmin = static_cast<float>(spans[2 * i] * _dexels.spacing());
+                float xmax = originArr[0] + (x + 1) * spacing;
+                float ymax = originArr[1] + (y + 1) * spacing;
+                float zmax = static_cast<float>(spans[2 * i + 1] * _dexels.spacing());
+
+                // Define 8 vertices of the hexahedron (cube)
+                // A = (xmin, ymin, zmin)
+                // B = (xmax, ymin, zmin)
+                // C = (xmin, ymax, zmin)
+                // D = (xmax, ymax, zmin)
+                // E = (xmin, ymin, zmax)
+                // F = (xmax, ymin, zmax)
+                // G = (xmin, ymax, zmax)
+                // H = (xmax, ymax, zmax)
+                float cubeVerts[8][3] = {
+                    { xmin, ymin, zmin }, // A, index 0
+                    { xmax, ymin, zmin }, // B, index 1
+                    { xmin, ymax, zmin }, // C, index 2
+                    { xmax, ymax, zmin }, // D, index 3
+                    { xmin, ymin, zmax }, // E, index 4
+                    { xmax, ymin, zmax }, // F, index 5
+                    { xmin, ymax, zmax }, // G, index 6
+                    { xmax, ymax, zmax }  // H, index 7
+                };
+
+                // Base index for these 8 vertices in the _vertices vector.
+                // Each vertex is 3 floats.
+                unsigned int baseIndex = static_cast<unsigned int>(_vertices.size() / 3);
+
+                // Append the 8 vertices to _vertices vector.
+                for (int vi = 0; vi < 8; ++vi) {
+                    _vertices.push_back(cubeVerts[vi][0]);
+                    _vertices.push_back(cubeVerts[vi][1]);
+                    _vertices.push_back(cubeVerts[vi][2]);
+                }
+
+                // Triangulate the hexahedron into 12 triangles.
+                // We define the cube faces as follows (using our vertex order above):
+                //
+                // Back face (z = zmin): A, B, D, C
+                // Front face (z = zmax): E, F, H, G
+                // Left face (x = xmin): A, C, G, E
+                // Right face (x = xmax): B, D, H, F
+                // Top face (y = ymax): C, D, H, G
+                // Bottom face (y = ymin): A, B, F, E
+                //
+                // Each face is split into 2 triangles.
+                // The triangle vertex indices are offset by baseIndex.
+                unsigned int cubeFaces[6][4] = {
+                    { 0, 1, 3, 2 }, // Back face: A, B, D, C
+                    { 4, 5, 7, 6 }, // Front face: E, F, H, G
+                    { 0, 2, 6, 4 }, // Left face: A, C, G, E
+                    { 1, 3, 7, 5 }, // Right face: B, D, H, F
+                    { 2, 3, 7, 6 }, // Top face: C, D, H, G
+                    { 0, 1, 5, 4 }  // Bottom face: A, B, F, E
+                };
+                // For each face, add 2 triangles
+                for (int face = 0; face < 6; ++face) {
+                    // First triangle: face[0], face[1], face[2]
+                    _facetIndices.push_back(baseIndex + cubeFaces[face][0]);
+                    _facetIndices.push_back(baseIndex + cubeFaces[face][1]);
+                    _facetIndices.push_back(baseIndex + cubeFaces[face][2]);
+                    // Second triangle: face[0], face[2], face[3]
+                    _facetIndices.push_back(baseIndex + cubeFaces[face][0]);
+                    _facetIndices.push_back(baseIndex + cubeFaces[face][2]);
+                    _facetIndices.push_back(baseIndex + cubeFaces[face][3]);
+                }
+            } // end for each span
+        } // end for x
+    } // end for y
 }
