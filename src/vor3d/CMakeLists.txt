@@ -6,6 +6,9 @@ project(vor3d)
 ################################################################################
 
 add_library(${PROJECT_NAME}
+		AABB.cpp
+		AABB.h
+		Box.h
 		Common.cpp
 		Common.h
 		CompressedVolume.cpp
@@ -19,6 +22,7 @@ add_library(${PROJECT_NAME}
 		HalfDilationOperator.cpp
 		HalfDilationOperator.h
 		HalfDilationOperator.hpp
+		Geometry.h
 		Morpho2D.cpp
 		Morpho2D.h
 		MorphologyOperators.cpp
