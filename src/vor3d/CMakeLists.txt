@@ -23,11 +23,14 @@ add_library(${PROJECT_NAME}
 		HalfDilationOperator.h
 		HalfDilationOperator.hpp
 		Geometry.h
+		Logger.h
 		Morpho2D.cpp
 		Morpho2D.h
 		MorphologyOperators.cpp
 		MorphologyOperators.h
 		MorphologyOperators.hpp
+		MorphologyProcessor.cpp
+		MorphologyProcessor.h
 		SeparatePower2D.cpp
 		SeparatePower2D.h
 		Timer.cpp

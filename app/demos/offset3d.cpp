@@ -23,9 +23,12 @@
 // Include vor3d module headers (implementation in src/vor3d)
 #include <vor3d/CompressedVolume.h>
 #include <vor3d/Dexelize.h>
+#include <vor3d/Logger.h>
 #include <vor3d/VoronoiVorPower.h>
 #include <vor3d/VoronoiBruteForce.h>
 #include <vor3d/Timer.h>
+
+#include <vor3d/MorphologyProcessor.h>
 
 // -----------------------------------------------------------------------------
 // STL IO Functions
@@ -198,90 +201,66 @@ bool WriteSTL(const std::string &filename, const std::vector<float>& vertices, c
  */
 int main() {
 
-    std::time_t now = std::time(nullptr);
-    std::cout << ">>> current time: " << std::ctime(&now);
+    LOG_TIME();
 
-	std::string inputFilename = "input/01.stl";
-	std::string outputFilename = "output/result.stl";
+    std::string inputFilename = "input/01.stl";
+    std::string outputFilename = "output/result.stl";
 
-	// Read the input STL model into flat vertex array and triangle index array.
+    // Load input mesh
     std::vector<float> inVertices;
     std::vector<unsigned int> inIndices;
     if (!ReadSTL(inputFilename, inVertices, inIndices)) {
-        std::cerr << "Error: Failed to read STL file: " << inputFilename << std::endl;
+        LOG_FAIL("Failed to read input STL...");
         return 1;
     }
-    
-    // -------------------------------------------------------------------------    
-    // Convert the STL mesh into a CompressedVolume for dexel processing.
-    // TODO: Replace this placeholder with your actual conversion function.
-    vor3d::CompressedVolume inputVolume;
-	double dexelsSize = 1.0;
-	double padding = 0.0;
-	int numDexels = 64;
-    inputVolume = voroffset3d::CreateDexelsFromMeshBuffers(inVertices, inIndices, dexelsSize, padding, numDexels);
-    
-    // Set default parameters (adjust as necessary)
-    double radius = 8.0;
-    bool radiusInMM = false;
-    
-    // Convert radius from mm to dexel units if needed.
-    if (radiusInMM) {
-        radius /= inputVolume.spacing();
+
+    // Set parameters
+    morpho3d::MorphologyParams params;
+    // Type of morphological operation: options include "dilation", "erosion", "closing", "opening", "noop"
+    params.operation = "erosion";
+    // Size of each dexel (grid cell) in world units (e.g., mm)
+    params.dexelSize = 1.0;    
+    // Radius of morphological effect (in dexel units unless radiusInMM = true)
+    params.radius = 8.0;   
+    // Whether the radius is specified in millimeters (true) or dexel units (false)
+    params.radiusInMM = false;   
+    // Target resolution: number of dexels along the longest axis
+    params.numDexels = 256;
+
+    // Create processor
+    morpho3d::MorphologyProcessor* processor = morpho3d::MorphologyProcessor::Create(params);
+
+    // Output buffers
+    float* outVertices = nullptr;
+    unsigned int* outIndices = nullptr;
+    size_t numOutVertices = 0, numOutIndices = 0;
+
+    // Run morphology
+    if (!processor->Run(
+        inVertices.data(), inVertices.size(),
+        inIndices.data(), inIndices.size(),
+        &outVertices, &numOutVertices,
+        &outIndices, &numOutIndices
+    )) {
+        LOG_FAIL("Morphological operation failed...");
+        morpho3d::MorphologyProcessor::Delete(processor);
+        return 1;
     }
-    
-	// Create the morphological (offset) operator based on the chosen method.
-	std::unique_ptr<vor3d::VoronoiMorpho> offsetOp;
-	std::string method = "ours";  // Options: "ours" or "brute_force"
-	if (method == "ours") {
-		offsetOp = std::make_unique<vor3d::VoronoiMorphoVorPower>();
-	} else if (method == "brute_force") {
-		offsetOp = std::make_unique<vor3d::VoronoiMorphoBruteForce>();
-	} else {
-		std::cerr << "Error: Invalid method: " << method << std::endl;
-		return 1;
-	}
-	if (!offsetOp) {
-		std::cerr << "Error: Failed to create offset operator." << std::endl;
-		return 1;
-	}
 
-	// Apply the morphological operation (example: dilation)
-	std::string operation = "dilation"; // Options: "noop", "erosion", "closing", "opening"
-	double timeFirst = 0, timeSecond = 0;
-	vor3d::CompressedVolume outputVolume;
-	if (operation == "noop") {
-		outputVolume = inputVolume;
-	} else if (operation == "erosion") {
-		offsetOp->erosion(inputVolume, outputVolume, radius, timeFirst, timeSecond);
-	} else if (operation == "dilation") {
-		offsetOp->dilation(inputVolume, outputVolume, radius, timeFirst, timeSecond);
-	} else if (operation == "closing") {
-		vor3d::CompressedVolume tmpVolume;
-		offsetOp->dilation(inputVolume, tmpVolume, radius, timeFirst, timeSecond);
-		offsetOp->erosion(tmpVolume, outputVolume, radius, timeFirst, timeSecond);
-	} else if (operation == "opening") {
-		vor3d::CompressedVolume tmpVolume;
-		offsetOp->erosion(inputVolume, tmpVolume, radius, timeFirst, timeSecond);
-		offsetOp->dilation(tmpVolume, outputVolume, radius, timeFirst, timeSecond);
-	} else {
-		std::cerr << "Error: Invalid operation: " << operation << std::endl;
-		return 1;
-	}
+    // Convert result to vectors for STL output
+    std::vector<float> finalVerts(outVertices, outVertices + numOutVertices);
+    std::vector<unsigned int> finalInds(outIndices, outIndices + numOutIndices);
 
-	// TODO: Convert the output CompressedVolume back to STL mesh arrays.
-	// For now, we use placeholder empty vectors.
-	std::vector<float> outVertices;         // Output vertex array (x, y, z interleaved)
-	std::vector<unsigned int> outIndices;      // Output triangle index array (3 indices per triangle)
+    delete[] outVertices;
+    delete[] outIndices;
 
-	voroffset3d::DumpDexelsToVoxelsMC(outputVolume, outVertices, outIndices);
+    if (!WriteSTL(outputFilename, finalVerts, finalInds)) {
+        LOG_FAIL("Failed to write output STL...");
+        morpho3d::MorphologyProcessor::Delete(processor);
+        return 1;
+    }
 
-	// Write the output STL model.
-	if (!WriteSTL(outputFilename, outVertices, outIndices)) {
-		std::cerr << "Error: Failed to write STL file: " << outputFilename << std::endl;
-		return 1;
-	}
-
-	std::cout << "Mesh morph operation completed successfully!" << std::endl;
-	return 0;
+    morpho3d::MorphologyProcessor::Delete(processor);
+    LOG_PASS("Mesh morph operation completed.");
+    return 0;
 }

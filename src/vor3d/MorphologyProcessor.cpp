@@ -62,14 +62,8 @@ bool MorphologyProcessor::Run(const float* inVertices, size_t numInVertices,
 }
 
 bool MorphologyProcessor::CreateOffsetOperator() {
-    if (m_params.method == "ours") {
-        m_offsetOp = std::make_unique<vor3d::VoronoiMorphoVorPower>();
-    } else if (m_params.method == "brute_force") {
-        m_offsetOp = std::make_unique<vor3d::VoronoiMorphoBruteForce>();
-    } else {
-        std::cerr << "Error: Unknown offset method: " << m_params.method << std::endl;
-        return false;
-    }
+    m_offsetOp = std::make_unique<vor3d::VoronoiMorphoVorPower>();
+    // m_offsetOp = std::make_unique<vor3d::VoronoiMorphoBruteForce>();
     return true;
 }
 
