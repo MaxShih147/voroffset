@@ -26,6 +26,11 @@ namespace voroffset3d
 		std::vector<unsigned int> &_facetIndices
 	);
 
+	void DumpDexelsToVoxelsMC(
+		const vor3d::CompressedVolume &_dexels,
+		std::vector<float> &_vertices,          // 依序存放 x,y,z (output)
+		std::vector<unsigned int> &_facetIndices  // 每三個為一個三角形 (output)
+	);
 /**
  * @brief Deprecated: Creates dexel volume from a model file.
  * @note This modification was implemented by max_shih.

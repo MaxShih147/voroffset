@@ -9,21 +9,22 @@
 // Author: Max Shih
 ////////////////////////////////////////////////////////////////////////////////
 
-#include <iostream>
-#include <fstream>
-#include <vector>
-#include <string>
-#include <thread>
 #include <algorithm>
 #include <cstdint>
 #include <cmath>
+#include <ctime>
+#include <fstream>
+#include <iostream>
 #include <memory>
+#include <string>
+#include <thread>
+#include <vector>
 
 // Include vor3d module headers (implementation in src/vor3d)
 #include <vor3d/CompressedVolume.h>
+#include <vor3d/Dexelize.h>
 #include <vor3d/VoronoiVorPower.h>
 #include <vor3d/VoronoiBruteForce.h>
-#include <vor3d/Dexelize.h>
 #include <vor3d/Timer.h>
 
 // -----------------------------------------------------------------------------
@@ -197,6 +198,9 @@ bool WriteSTL(const std::string &filename, const std::vector<float>& vertices, c
  */
 int main() {
 
+    std::time_t now = std::time(nullptr);
+    std::cout << ">>> current time: " << std::ctime(&now);
+
 	std::string inputFilename = "input/01.stl";
 	std::string outputFilename = "output/result.stl";
 
@@ -214,7 +218,7 @@ int main() {
     vor3d::CompressedVolume inputVolume;
 	double dexelsSize = 1.0;
 	double padding = 0.0;
-	int numDexels = 256;
+	int numDexels = 64;
     inputVolume = voroffset3d::CreateDexelsFromMeshBuffers(inVertices, inIndices, dexelsSize, padding, numDexels);
     
     // Set default parameters (adjust as necessary)
@@ -270,7 +274,7 @@ int main() {
 	std::vector<float> outVertices;         // Output vertex array (x, y, z interleaved)
 	std::vector<unsigned int> outIndices;      // Output triangle index array (3 indices per triangle)
 
-	voroffset3d::DumpDexelsIntoMeshBuffers(outputVolume, outVertices, outIndices);
+	voroffset3d::DumpDexelsToVoxelsMC(outputVolume, outVertices, outIndices);
 
 	// Write the output STL model.
 	if (!WriteSTL(outputFilename, outVertices, outIndices)) {
