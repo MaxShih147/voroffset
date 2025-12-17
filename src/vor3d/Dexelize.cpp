@@ -8,6 +8,11 @@
 #include <iterator>
 #include <random>
 
+#include <unordered_map>
+#include <unordered_set>
+#include <cmath>
+#include <cstdint>
+
 #ifndef TEST_WID
 #define TEST_WID 25
 #endif
@@ -17,6 +22,209 @@
 #ifndef TEST_HEI
 #define TEST_HEI 40
 #endif
+
+void laplacian_smooth(std::vector<float>& _vertices, const std::vector<unsigned int>& _facetIndices) {
+    struct v_conncted {
+        std::vector<int> facet_id;
+        std::vector<unsigned int> id_in_f;
+    };
+
+    std::vector<float> orig_vertices = _vertices;
+
+    if (_vertices.size() % 3 != 0 || _facetIndices.size() % 3 != 0) // input error
+        return;
+
+    const int vertex_size_orig = static_cast<int>(_vertices.size() / 3);
+    const int facet_size = static_cast<int>(_facetIndices.size() / 3);
+
+    if (vertex_size_orig == 0 || facet_size == 0)
+        return;
+
+    float weld_eps = 0.01f;
+    float weld_eps2 = weld_eps * weld_eps;
+
+    struct QuantKey {
+        int ix, iy, iz;
+    };
+    struct QuantKeyHash {
+        std::size_t operator()(const QuantKey& k) const noexcept {
+            std::size_t h = static_cast<std::size_t>(k.ix);
+            h ^= static_cast<std::size_t>(k.iy) + 0x9e3779b9u + (h << 6) + (h >> 2);
+            h ^= static_cast<std::size_t>(k.iz) + 0x9e3779b9u + (h << 6) + (h >> 2);
+            return h;
+        }
+    };
+    struct QuantKeyEq {
+        bool operator()(const QuantKey& a, const QuantKey& b) const noexcept {
+            return a.ix == b.ix && a.iy == b.iy && a.iz == b.iz;
+        }
+    };
+
+    std::unordered_map<QuantKey, std::vector<unsigned int>, QuantKeyHash, QuantKeyEq> cells;
+    cells.reserve(static_cast<std::size_t>(vertex_size_orig));
+
+    std::vector<unsigned int> rep(static_cast<std::size_t>(vertex_size_orig));
+
+    for (int i = 0; i < vertex_size_orig; ++i) {
+        float x = _vertices[i * 3 + 0];
+        float y = _vertices[i * 3 + 1];
+        float z = _vertices[i * 3 + 2];
+
+        int ix = static_cast<int>(std::floor(x / weld_eps + 0.5f));
+        int iy = static_cast<int>(std::floor(y / weld_eps + 0.5f));
+        int iz = static_cast<int>(std::floor(z / weld_eps + 0.5f));
+
+        QuantKey key{ ix, iy, iz };
+        auto& bucket = cells[key];
+
+        bool found = false;
+        for (unsigned int idx : bucket) {
+            float x2 = _vertices[idx * 3 + 0];
+            float y2 = _vertices[idx * 3 + 1];
+            float z2 = _vertices[idx * 3 + 2];
+            float ddx = x - x2;
+            float ddy = y - y2;
+            float ddz = z - z2;
+            float dist2 = ddx * ddx + ddy * ddy + ddz * ddz;
+            if (dist2 <= weld_eps2) {
+                rep[static_cast<std::size_t>(i)] = idx;
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            unsigned int iu = static_cast<unsigned int>(i);
+            bucket.push_back(iu);
+            rep[static_cast<std::size_t>(i)] = iu;
+        }
+    }
+
+    std::vector<unsigned int> rep_to_new(static_cast<std::size_t>(vertex_size_orig),
+        std::numeric_limits<unsigned int>::max());
+    std::vector<float> vertices_welded;
+    vertices_welded.reserve(static_cast<std::size_t>(vertex_size_orig) * 3);
+
+    unsigned int new_vertex_count = 0;
+    for (int i = 0; i < vertex_size_orig; ++i) {
+        unsigned int r = rep[static_cast<std::size_t>(i)];
+        if (rep_to_new[r] == std::numeric_limits<unsigned int>::max()) {
+            rep_to_new[r] = new_vertex_count++;
+            vertices_welded.push_back(_vertices[r * 3 + 0]);
+            vertices_welded.push_back(_vertices[r * 3 + 1]);
+            vertices_welded.push_back(_vertices[r * 3 + 2]);
+        }
+    }
+
+    // old index → new index
+    std::vector<unsigned int> old_to_new(static_cast<std::size_t>(vertex_size_orig));
+    for (int i = 0; i < vertex_size_orig; ++i) {
+        unsigned int r = rep[static_cast<std::size_t>(i)];
+        old_to_new[static_cast<std::size_t>(i)] = rep_to_new[r];
+    }
+
+    std::vector<unsigned int> indices_welded(_facetIndices.size());
+    for (std::size_t k = 0; k < _facetIndices.size(); ++k) {
+        unsigned int old_vid = _facetIndices[k];
+        if (old_vid >= static_cast<unsigned int>(vertex_size_orig)) {
+            return;
+        }
+        indices_welded[k] = old_to_new[old_vid];
+    }
+
+    int vertex_size = static_cast<int>(vertices_welded.size() / 3);
+    std::vector<float> fixed_vertices;
+    std::vector<v_conncted> v_connection_table;
+    fixed_vertices.resize(static_cast<std::size_t>(vertex_size) * 3u);
+    v_connection_table.resize(static_cast<std::size_t>(vertex_size));
+
+    // get connection table
+    for (int i = 0; i < facet_size; i++) {
+        for (int j = 0; j < 3; j++) {
+            unsigned int vid = indices_welded[static_cast<std::size_t>(i) * 3u + static_cast<std::size_t>(j)];
+            if (vid < static_cast<unsigned int>(vertex_size)) {
+                v_connection_table[vid].facet_id.push_back(i);
+                v_connection_table[vid].id_in_f.push_back(static_cast<unsigned int>(j));
+            }
+            else {
+                // wrong index
+                return;
+            }
+        }
+    }
+    std::vector<int> neighbors;
+    for (int i = 0; i < vertex_size; i++) {
+        neighbors.clear();
+        for (std::size_t j = 0; j < v_connection_table[i].id_in_f.size(); j++) {
+            unsigned int id_in_f = v_connection_table[i].id_in_f[j];
+            int next_v_id = static_cast<int>((id_in_f + 1u) % 3u);
+            neighbors.push_back(static_cast<int>(
+                indices_welded[static_cast<std::size_t>(v_connection_table[i].facet_id[j]) * 3u +
+                static_cast<std::size_t>(next_v_id)]));
+
+            next_v_id = static_cast<int>((id_in_f + 2u) % 3u);
+            neighbors.push_back(static_cast<int>(
+                indices_welded[static_cast<std::size_t>(v_connection_table[i].facet_id[j]) * 3u +
+                static_cast<std::size_t>(next_v_id)]));
+        }
+
+        int _s = 0;
+        float _x = 0.0f;
+        float _y = 0.0f;
+        float _z = 0.0f;
+
+        for (std::size_t j = 0; j < neighbors.size(); j++) {
+            if (neighbors[j] == i)
+                continue;
+
+            bool already_have = false;
+            for (std::size_t k = 0; k < j; k++) {
+                if (neighbors[k] == neighbors[j]) {
+                    already_have = true;
+                    break;
+                }
+            }
+            if (already_have)
+                continue;
+
+            _s++;
+            int nid = neighbors[j];
+            _x += vertices_welded[static_cast<std::size_t>(nid) * 3u + 0u];
+            _y += vertices_welded[static_cast<std::size_t>(nid) * 3u + 1u];
+            _z += vertices_welded[static_cast<std::size_t>(nid) * 3u + 2u];
+        }
+        if (_s == 0) {
+            fixed_vertices[static_cast<std::size_t>(i) * 3u + 0u] = vertices_welded[static_cast<std::size_t>(i) * 3u + 0u];
+            fixed_vertices[static_cast<std::size_t>(i) * 3u + 1u] = vertices_welded[static_cast<std::size_t>(i) * 3u + 1u];
+            fixed_vertices[static_cast<std::size_t>(i) * 3u + 2u] = vertices_welded[static_cast<std::size_t>(i) * 3u + 2u];
+            continue;
+        }
+        float _g = 0.375f + 0.2f * std::cos(2.0f * 3.14159265f / static_cast<float>(_s));
+        float _a = (0.625f - _g * _g) / static_cast<float>(_s);
+        float _b = 1.0f - static_cast<float>(_s) * _a;
+
+        fixed_vertices[static_cast<std::size_t>(i) * 3u + 0u] =
+            _b * vertices_welded[static_cast<std::size_t>(i) * 3u + 0u] + _a * _x;
+        fixed_vertices[static_cast<std::size_t>(i) * 3u + 1u] =
+            _b * vertices_welded[static_cast<std::size_t>(i) * 3u + 1u] + _a * _y;
+        fixed_vertices[static_cast<std::size_t>(i) * 3u + 2u] =
+            _b * vertices_welded[static_cast<std::size_t>(i) * 3u + 2u] + _a * _z;
+    }
+    for (int i = 0; i < vertex_size; ++i) {
+        vertices_welded[static_cast<std::size_t>(i) * 3u + 0u] = fixed_vertices[static_cast<std::size_t>(i) * 3u + 0u];
+        vertices_welded[static_cast<std::size_t>(i) * 3u + 1u] = fixed_vertices[static_cast<std::size_t>(i) * 3u + 1u];
+        vertices_welded[static_cast<std::size_t>(i) * 3u + 2u] = fixed_vertices[static_cast<std::size_t>(i) * 3u + 2u];
+    }
+    for (int i = 0; i < vertex_size_orig; ++i) {
+        unsigned int nid = old_to_new[static_cast<std::size_t>(i)];
+        _vertices[static_cast<std::size_t>(i) * 3u + 0u] = vertices_welded[static_cast<std::size_t>(nid) * 3u + 0u];
+        _vertices[static_cast<std::size_t>(i) * 3u + 1u] = vertices_welded[static_cast<std::size_t>(nid) * 3u + 1u];
+        _vertices[static_cast<std::size_t>(i) * 3u + 2u] = vertices_welded[static_cast<std::size_t>(nid) * 3u + 2u];
+    }
+}
+
+
+
 
 /**
  * @brief Compute the signed area of triangle (0,0)-(x1,y1)-(x2,y2), used to determine orientation.
@@ -186,7 +394,8 @@ voroffset3d::CompressedVolume voroffset3d::CreateDexelsFromMeshBuffers(
 	if (_numVoxels > 0) {
 		// Force number of voxels along longest axis
 		double maxExtent = std::max(extent.x, std::max(extent.y, extent.z));
-		_voxelSize = maxExtent / _numVoxels;
+        if(_voxelSize <= 0)
+		    _voxelSize = maxExtent / _numVoxels;
 	}
 	
 	AABB aabbTree;
