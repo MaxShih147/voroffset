@@ -36,6 +36,7 @@ bool MorphologyProcessor::Run(const float* inVertices, size_t numInVertices,
     m_outVertices = new std::vector<float>();
     m_outIndices = new std::vector<unsigned int>();
 
+    m_params.radiusInMM = true;
     // Convert to Dexel volume
     m_inputVolume = voroffset3d::CreateDexelsFromMeshBuffers(
         m_inVertices, m_inIndices, m_params.dexelSize, m_params.padding, m_params.numDexels);
