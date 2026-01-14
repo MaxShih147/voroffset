@@ -32,6 +32,14 @@ bool Morphology_Run(MorphologyHandle handle,
                     float** outVertices, size_t* numOutVertices,
                     unsigned int** outIndices, size_t* numOutIndices);
 
+bool Morphology_Run_OpenBottom(MorphologyHandle handle,
+    const float* inVertices, size_t numInVertices,
+    const unsigned int* inIndices, size_t numInIndices,
+    float rotX_rad, float rotY_rad, float rotZ_rad,
+    float** outVertices, size_t* numOutVertices,
+    unsigned int** outIndices, size_t* numOutIndices);
+
+
 #ifdef __cplusplus
 }
 #endif

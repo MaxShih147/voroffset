@@ -70,6 +70,10 @@ public:
              const unsigned int* inIndices, size_t numInIndices,
              float** outVertices, size_t* numOutVertices,
              unsigned int** outIndices, size_t* numOutIndices);
+    bool RunOpenBottom(const float* inVertices, size_t numInVertices,
+        const unsigned int* inIndices, size_t numInIndices,
+        float** outVertices, size_t* numOutVertices,
+        unsigned int** outIndices, size_t* numOutIndices);
 public:
     MorphologyProcessor(const MorphologyParams& params);
 
