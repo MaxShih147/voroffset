@@ -41,6 +41,11 @@ void laplacian_smooth(std::vector<float>& _vertices, const std::vector<unsigned 
         return;
 
     float weld_eps = 0.01f;
+
+    // smoothing strength: 1.0 = original behavior, >1.0 stronger, <1.0 weaker
+    float lambda = 1.0f;
+    int iterations = 5;
+
     float weld_eps2 = weld_eps * weld_eps;
 
     struct QuantKey {
@@ -152,68 +157,196 @@ void laplacian_smooth(std::vector<float>& _vertices, const std::vector<unsigned 
             }
         }
     }
-    std::vector<int> neighbors;
-    for (int i = 0; i < vertex_size; i++) {
-        neighbors.clear();
-        for (std::size_t j = 0; j < v_connection_table[i].id_in_f.size(); j++) {
-            unsigned int id_in_f = v_connection_table[i].id_in_f[j];
-            int next_v_id = static_cast<int>((id_in_f + 1u) % 3u);
-            neighbors.push_back(static_cast<int>(
-                indices_welded[static_cast<std::size_t>(v_connection_table[i].facet_id[j]) * 3u +
-                static_cast<std::size_t>(next_v_id)]));
 
-            next_v_id = static_cast<int>((id_in_f + 2u) % 3u);
-            neighbors.push_back(static_cast<int>(
-                indices_welded[static_cast<std::size_t>(v_connection_table[i].facet_id[j]) * 3u +
-                static_cast<std::size_t>(next_v_id)]));
-        }
 
-        int _s = 0;
-        float _x = 0.0f;
-        float _y = 0.0f;
-        float _z = 0.0f;
+    // Boundary / Feature protection
+    float feature_angle_deg = 60.0f;     // 夾角超過此值視為銳邊
+    float feature_cos_th = std::cos(feature_angle_deg * 3.14159265f / 180.0f);
 
-        for (std::size_t j = 0; j < neighbors.size(); j++) {
-            if (neighbors[j] == i)
-                continue;
+    std::vector<uint8_t> is_boundary(static_cast<std::size_t>(vertex_size), 0);
+    std::vector<uint8_t> is_feature(static_cast<std::size_t>(vertex_size), 0);
 
-            bool already_have = false;
-            for (std::size_t k = 0; k < j; k++) {
-                if (neighbors[k] == neighbors[j]) {
-                    already_have = true;
-                    break;
-                }
+    // face normals (normalized). facet_size triangles, indices_welded size = facet_size*3
+    struct N3 { float x, y, z; };
+    std::vector<N3> face_n(static_cast<std::size_t>(facet_size), { 0,0,0 });
+    std::vector<uint8_t> face_valid(static_cast<std::size_t>(facet_size), 0);
+
+    auto cross3 = [](float ax, float ay, float az, float bx, float by, float bz) -> N3 {
+        return { ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx };
+        };
+    auto dot3 = [](const N3& a, const N3& b) -> float { return a.x * b.x + a.y * b.y + a.z * b.z; };
+
+    for (int fi = 0; fi < facet_size; ++fi) {
+        unsigned int ia = indices_welded[static_cast<std::size_t>(fi) * 3u + 0u];
+        unsigned int ib = indices_welded[static_cast<std::size_t>(fi) * 3u + 1u];
+        unsigned int ic = indices_welded[static_cast<std::size_t>(fi) * 3u + 2u];
+        if (ia >= (unsigned)vertex_size || ib >= (unsigned)vertex_size || ic >= (unsigned)vertex_size) continue;
+        if (ia == ib || ib == ic || ic == ia) continue; // degenerate after weld
+
+        float ax = vertices_welded[static_cast<std::size_t>(ia) * 3u + 0u];
+        float ay = vertices_welded[static_cast<std::size_t>(ia) * 3u + 1u];
+        float az = vertices_welded[static_cast<std::size_t>(ia) * 3u + 2u];
+        float bx = vertices_welded[static_cast<std::size_t>(ib) * 3u + 0u];
+        float by = vertices_welded[static_cast<std::size_t>(ib) * 3u + 1u];
+        float bz = vertices_welded[static_cast<std::size_t>(ib) * 3u + 2u];
+        float cx = vertices_welded[static_cast<std::size_t>(ic) * 3u + 0u];
+        float cy = vertices_welded[static_cast<std::size_t>(ic) * 3u + 1u];
+        float cz = vertices_welded[static_cast<std::size_t>(ic) * 3u + 2u];
+
+        float e1x = bx - ax, e1y = by - ay, e1z = bz - az;
+        float e2x = cx - ax, e2y = cy - ay, e2z = cz - az;
+
+        N3 n = cross3(e1x, e1y, e1z, e2x, e2y, e2z);
+        float len2 = n.x * n.x + n.y * n.y + n.z * n.z;
+        if (len2 <= 1e-20f) continue;
+
+        float invLen = 1.0f / std::sqrt(len2);
+        n.x *= invLen; n.y *= invLen; n.z *= invLen;
+        face_n[static_cast<std::size_t>(fi)] = n;
+        face_valid[static_cast<std::size_t>(fi)] = 1;
+    }
+
+    // Edge map: undirected edge -> up to two adjacent faces
+    struct EdgeInfo { int f0 = -1; int f1 = -1; };
+    struct U64Hash { std::size_t operator()(std::uint64_t k) const noexcept { return (std::size_t)k; } };
+
+    std::unordered_map<std::uint64_t, EdgeInfo, U64Hash> edge_faces;
+    edge_faces.reserve(static_cast<std::size_t>(facet_size) * 3u);
+
+    auto edge_key = [](unsigned int a, unsigned int b) -> std::uint64_t {
+        unsigned int lo = (a < b) ? a : b;
+        unsigned int hi = (a < b) ? b : a;
+        return (std::uint64_t(lo) << 32) | std::uint64_t(hi);
+        };
+
+    for (int fi = 0; fi < facet_size; ++fi) {
+        unsigned int v[3] = {
+            indices_welded[static_cast<std::size_t>(fi) * 3u + 0u],
+            indices_welded[static_cast<std::size_t>(fi) * 3u + 1u],
+            indices_welded[static_cast<std::size_t>(fi) * 3u + 2u]
+        };
+        // degenerate triangles can be ignored for edge classification too
+        if (v[0] == v[1] || v[1] == v[2] || v[2] == v[0]) continue;
+
+        for (int e = 0; e < 3; ++e) {
+            unsigned int a = v[e];
+            unsigned int b = v[(e + 1) % 3];
+            if (a == b) continue;
+
+            std::uint64_t k = edge_key(a, b);
+            auto& info = edge_faces[k];
+            if (info.f0 == -1) info.f0 = fi;
+            else if (info.f1 == -1) info.f1 = fi;
+            else {
+                // non-manifold: more than 2 faces share an edge, ignore extras
             }
-            if (already_have)
-                continue;
-
-            _s++;
-            int nid = neighbors[j];
-            _x += vertices_welded[static_cast<std::size_t>(nid) * 3u + 0u];
-            _y += vertices_welded[static_cast<std::size_t>(nid) * 3u + 1u];
-            _z += vertices_welded[static_cast<std::size_t>(nid) * 3u + 2u];
         }
-        if (_s == 0) {
-            fixed_vertices[static_cast<std::size_t>(i) * 3u + 0u] = vertices_welded[static_cast<std::size_t>(i) * 3u + 0u];
-            fixed_vertices[static_cast<std::size_t>(i) * 3u + 1u] = vertices_welded[static_cast<std::size_t>(i) * 3u + 1u];
-            fixed_vertices[static_cast<std::size_t>(i) * 3u + 2u] = vertices_welded[static_cast<std::size_t>(i) * 3u + 2u];
+    }
+
+    // Mark boundary + feature vertices
+    for (const auto& kv : edge_faces) {
+        std::uint64_t k = kv.first;
+        const EdgeInfo& info = kv.second;
+
+        unsigned int a = static_cast<unsigned int>(k >> 32);
+        unsigned int b = static_cast<unsigned int>(k & 0xffffffffu);
+
+        if (a >= (unsigned)vertex_size || b >= (unsigned)vertex_size) continue;
+
+        if (info.f1 == -1) {
+            // boundary edge
+            is_boundary[a] = 1;
+            is_boundary[b] = 1;
             continue;
         }
-        float _g = 0.375f + 0.2f * std::cos(2.0f * 3.14159265f / static_cast<float>(_s));
-        float _a = (0.625f - _g * _g) / static_cast<float>(_s);
-        float _b = 1.0f - static_cast<float>(_s) * _a;
 
-        fixed_vertices[static_cast<std::size_t>(i) * 3u + 0u] =
-            _b * vertices_welded[static_cast<std::size_t>(i) * 3u + 0u] + _a * _x;
-        fixed_vertices[static_cast<std::size_t>(i) * 3u + 1u] =
-            _b * vertices_welded[static_cast<std::size_t>(i) * 3u + 1u] + _a * _y;
-        fixed_vertices[static_cast<std::size_t>(i) * 3u + 2u] =
-            _b * vertices_welded[static_cast<std::size_t>(i) * 3u + 2u] + _a * _z;
+        // feature edge by dihedral angle
+        int f0 = info.f0, f1 = info.f1;
+        if (f0 < 0 || f1 < 0) continue;
+        if (!face_valid[(std::size_t)f0] || !face_valid[(std::size_t)f1]) continue;
+
+        float c = dot3(face_n[(std::size_t)f0], face_n[(std::size_t)f1]); // cos(theta)
+        // theta > feature_angle => cos(theta) < cos(threshold)
+        if (c < feature_cos_th) {
+            is_feature[a] = 1;
+            is_feature[b] = 1;
+        }
     }
-    for (int i = 0; i < vertex_size; ++i) {
-        vertices_welded[static_cast<std::size_t>(i) * 3u + 0u] = fixed_vertices[static_cast<std::size_t>(i) * 3u + 0u];
-        vertices_welded[static_cast<std::size_t>(i) * 3u + 1u] = fixed_vertices[static_cast<std::size_t>(i) * 3u + 1u];
-        vertices_welded[static_cast<std::size_t>(i) * 3u + 2u] = fixed_vertices[static_cast<std::size_t>(i) * 3u + 2u];
+
+
+    std::vector<int> neighbors;
+    for (int iter = 0; iter < iterations; ++iter) {
+
+        for (int i = 0; i < vertex_size; i++) {
+            // protect boundary / feature vertices
+            if (is_boundary[static_cast<std::size_t>(i)] || is_feature[static_cast<std::size_t>(i)]) {
+                fixed_vertices[static_cast<std::size_t>(i) * 3u + 0u] = vertices_welded[static_cast<std::size_t>(i) * 3u + 0u];
+                fixed_vertices[static_cast<std::size_t>(i) * 3u + 1u] = vertices_welded[static_cast<std::size_t>(i) * 3u + 1u];
+                fixed_vertices[static_cast<std::size_t>(i) * 3u + 2u] = vertices_welded[static_cast<std::size_t>(i) * 3u + 2u];
+                continue;
+            }
+
+            neighbors.clear();
+            for (std::size_t j = 0; j < v_connection_table[i].id_in_f.size(); j++) {
+                unsigned int id_in_f = v_connection_table[i].id_in_f[j];
+                int next_v_id = static_cast<int>((id_in_f + 1u) % 3u);
+                neighbors.push_back(static_cast<int>(
+                    indices_welded[v_connection_table[i].facet_id[j] * 3u + next_v_id]));
+
+                next_v_id = static_cast<int>((id_in_f + 2u) % 3u);
+                neighbors.push_back(static_cast<int>(
+                    indices_welded[v_connection_table[i].facet_id[j] * 3u + next_v_id]));
+            }
+
+            int _s = 0;
+            float _x = 0.0f, _y = 0.0f, _z = 0.0f;
+
+            for (std::size_t j = 0; j < neighbors.size(); j++) {
+                int nid = neighbors[j];
+                if (nid == i) continue;
+
+                bool dup = false;
+                for (std::size_t k = 0; k < j; k++) {
+                    if (neighbors[k] == nid) { dup = true; break; }
+                }
+                if (dup) continue;
+
+                _s++;
+                _x += vertices_welded[nid * 3u + 0u];
+                _y += vertices_welded[nid * 3u + 1u];
+                _z += vertices_welded[nid * 3u + 2u];
+            }
+
+            if (_s == 0) {
+                fixed_vertices[i * 3 + 0] = vertices_welded[i * 3 + 0];
+                fixed_vertices[i * 3 + 1] = vertices_welded[i * 3 + 1];
+                fixed_vertices[i * 3 + 2] = vertices_welded[i * 3 + 2];
+                continue;
+            }
+
+            float _g = 0.375f + 0.2f * std::cos(2.0f * 3.14159265f / float(_s));
+            float _a = (0.625f - _g * _g) / float(_s);
+            float _b = 1.0f - float(_s) * _a;
+
+            float vx = vertices_welded[i * 3 + 0];
+            float vy = vertices_welded[i * 3 + 1];
+            float vz = vertices_welded[i * 3 + 2];
+
+            float nx = _b * vx + _a * _x;
+            float ny = _b * vy + _a * _y;
+            float nz = _b * vz + _a * _z;
+
+            fixed_vertices[i * 3 + 0] = vx + lambda * (nx - vx);
+            fixed_vertices[i * 3 + 1] = vy + lambda * (ny - vy);
+            fixed_vertices[i * 3 + 2] = vz + lambda * (nz - vz);
+        }
+
+        // swap back for next iteration
+        for (int i = 0; i < vertex_size; ++i) {
+            vertices_welded[i * 3 + 0] = fixed_vertices[i * 3 + 0];
+            vertices_welded[i * 3 + 1] = fixed_vertices[i * 3 + 1];
+            vertices_welded[i * 3 + 2] = fixed_vertices[i * 3 + 2];
+        }
     }
     for (int i = 0; i < vertex_size_orig; ++i) {
         unsigned int nid = old_to_new[static_cast<std::size_t>(i)];
@@ -891,7 +1024,7 @@ void voroffset3d::DumpDexelsToVoxelsMC(
             const std::vector<double>& spans = _dexels.at(x, y);
             for (size_t i = 0; 2 * i < spans.size(); ++i) {
                 float span_zmax = static_cast<float>(spans[2 * i + 1] * _dexels.spacing()) + origin[2];
-                int z_index = static_cast<int>(std::ceil(span_zmax / spacing));
+                int z_index = static_cast<int>(std::ceil((span_zmax - origin[2]) / spacing));
                 gridZ = std::max(gridZ, z_index);
             }
         }
@@ -912,7 +1045,7 @@ void voroffset3d::DumpDexelsToVoxelsMC(
                 float span_zmax = static_cast<float>(spans[2 * i + 1] * _dexels.spacing()) + origin[2];
                 // 對該 cell 下所有 z 層，利用 voxel cube 中心判斷是否在 span 內
                 for (int z = 0; z < gridZ; ++z) {
-                    float voxelCenterZ = (z + 0.5f) * spacing;
+                    float voxelCenterZ = origin[2] + (z + 0.5f) * spacing;
                     if (voxelCenterZ >= span_zmin && voxelCenterZ <= span_zmax) {
                         occupancy[index3D(x, y, z)] = true;
                     }
@@ -1061,4 +1194,7 @@ void voroffset3d::DumpDexelsToVoxelsMC(
             }
         }
     }
+
+    laplacian_smooth(_vertices, _facetIndices);
+
 }
